@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+  <name>ioquake3</name>
+  <coder>ioquake3-wii contributors</coder>
+  <version>0.1.0</version>
+  <release_date>20250101000000</release_date>
+  <short_description>Quake III Arena (ioQuake3) for Wii</short_description>
+  <long_description>
+    ioQuake3 Wii port via devkitPPC + libogc.
+    Requires original Quake III Arena data files (pak0.pk3 – pak8.pk3)
+    placed at sd:/quake3/baseq3/.
+
+    Controls (Wiimote sideways + Nunchuk):
+      Nunchuk stick   – Move / Strafe
+      D-pad           – Look / Turn
+      B               – Fire
+      A               – Use
+      C               – Jump
+      Z               – Crouch
+      +/-             – Next/Prev weapon
+      HOME            – Quit to HBC
+  </long_description>
+</app>
