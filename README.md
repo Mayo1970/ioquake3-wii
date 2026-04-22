@@ -162,13 +162,10 @@ If you hit MEM1 exhaustion (crash / black screen), reduce `com_hunkMegs`
 first, then lower `r_picmip` (reduces texture memory).
 
 ---
-
 ## Known missing pieces (v0.1)
 
 - [ ] IR (Wiimote pointer) mouselook
 - [ ] On-screen keyboard for console input
-- [ ] Network play (Wii has Wi-Fi via ios/net; needs `net_ip.c` wiring)
-- [ ] GameCube controller support
 - [ ] Classic Controller support
 
 ---
