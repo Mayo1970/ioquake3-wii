@@ -89,31 +89,34 @@ extern void Wii_MEM2_Init(void);
 static void wii_power_cb(void)              { exit(0); }
 static void wii_reset_cb(u32 irq, void *ctx){ (void)irq; (void)ctx; exit(0); }
 
-/* Atomic crash log — open/write/close per entry so libfat commits each write
- * to SD immediately.  fflush() alone does not flush libfat's sector buffer. */
+/* Diagnostic log functions — only active with WII_DEBUG (make WII_DEBUG=1). */
+#ifdef WII_DEBUG
 void crash_mark(const char *msg)
 {
     FILE *f = fopen("sd:/quake3/crash.txt", "a");
     if (f) { fprintf(f, "%s\n", msg); fclose(f); }
 }
 #define CRASHLOG(fmt, ...) do { char _cb[256]; snprintf(_cb, sizeof(_cb), fmt, ##__VA_ARGS__); crash_mark(_cb); } while(0)
-
-/* Write a single-line progress marker to sd:/quake3/boot.txt.
- * Only call after fatInitDefault() has succeeded.
- * Exported so wii_snd.c / wii_glimp.c can use it. */
 void boot_mark(const char *msg)
 {
     FILE *f = fopen("sd:/quake3/boot.txt", "a");
     if (f) { fprintf(f, "%s\n", msg); fclose(f); }
 }
+#define WII_DBG_PRINTF(...) do { printf(__VA_ARGS__); fflush(stdout); } while(0)
+#else
+void crash_mark(const char *msg) { (void)msg; }
+#define CRASHLOG(...) ((void)0)
+void boot_mark(const char *msg) { (void)msg; }
+#define WII_DBG_PRINTF(...) ((void)0)
+#endif
 
 int main(int argc, char *argv[])
 {
     /* Basic Wii hardware init */
     Wii_InitConsole();
-    printf("ioquake3-wii starting...\n"); fflush(stdout);
+    WII_DBG_PRINTF("ioquake3-wii starting...\n");
     Wii_MEM2_Init();
-    printf("[wii] MEM2 init done\n"); fflush(stdout);
+    WII_DBG_PRINTF("[wii] MEM2 init done\n");
 
     /* SD card — must succeed before any file I/O */
     if (!Wii_MountSD()) {
@@ -121,18 +124,21 @@ int main(int argc, char *argv[])
         while (1) VIDEO_WaitVSync();
     }
 
-    /* SD is now accessible; write boot marker and open crash log */
-    /* Truncate boot.txt so stale entries from a previous run are cleared */
+#ifdef WII_DEBUG
     { FILE *f = fopen("sd:/quake3/boot.txt", "w"); if (f) fclose(f); }
     boot_mark("main() reached, SD mounted");
-
-    /* Truncate crash.txt from previous run */
     { FILE *f = fopen("sd:/quake3/crash.txt", "w"); if (f) fclose(f); }
     CRASHLOG("main() started");
+#endif
+
+    /* Malloc thread-safety — must be set up before WPAD_Init starts
+     * the Bluetooth background thread that calls malloc/free. */
+    extern void Wii_InitMallocLock(void);
+    Wii_InitMallocLock();
 
     /* Wiimote / input */
     Wii_Input_Init();
-    printf("[wii] Input OK\n"); fflush(stdout);
+    WII_DBG_PRINTF("[wii] Input OK\n");
     boot_mark("Input init done");
 
     /* Network init — connect to Wi-Fi via libogc.
@@ -142,22 +148,14 @@ int main(int argc, char *argv[])
      * which is harmless for offline play. */
     {
         int net_result = Wii_Net_Init();
-        if (net_result == 0) {
-            printf("[wii] Network OK — IP: %s\n", wii_net_local_ip);
-            char ipbuf[64];
-            snprintf(ipbuf, sizeof(ipbuf), "Network OK IP=%s", wii_net_local_ip);
-            boot_mark(ipbuf);
-        } else {
-            printf("[wii] Network init failed (err=%d) — check Wii Wi-Fi settings\n", net_result);
-            char errbuf[64];
-            snprintf(errbuf, sizeof(errbuf), "Network failed err=%d", net_result);
-            boot_mark(errbuf);
-        }
+        (void)net_result;
+        WII_DBG_PRINTF("[wii] Network %s\n", net_result == 0 ? "OK" : "failed");
+        boot_mark(net_result == 0 ? "Network OK" : "Network failed");
     }
 
     /* Audio (ASND) */
     Wii_Snd_Init();
-    printf("[wii] Audio OK\n"); fflush(stdout);
+    WII_DBG_PRINTF("[wii] Audio OK\n");
     boot_mark("Audio init done");
 
     /*
@@ -182,7 +180,7 @@ int main(int argc, char *argv[])
         "+set fs_homepath sd:/quake3 "
         "+set fs_steampath \"\" "
         "+set fs_gogpath \"\" "
-        "+set fs_game baseq3 "
+        "+set com_basegame " WII_BASEGAME " "
         "+set com_hunkMegs 32 "
         "+set com_zoneMegs 8 "
         /* --- display --- */
@@ -211,9 +209,22 @@ int main(int argc, char *argv[])
         "+set sv_maxclients 8 "
         "+set in_joystick 1 "
         "+set in_joystickUseAnalog 1 "
-        "+set j_pitch_axis 1 "
-        "+set j_yaw_axis 0 "
+        /* Dual-stick layout: left stick = move, C-stick = look.
+         * Axis indices match SE_JOYSTICK_AXIS events from wii_input.c. */
+        "+set j_side_axis 0 "       /* left stick X -> strafe */
+        "+set j_forward_axis 1 "    /* left stick Y -> forward/back */
+        "+set j_pitch_axis 3 "      /* C-stick Y -> look up/down */
+        "+set j_yaw_axis 4 "        /* C-stick X -> look left/right */
+        /* Sensitivity tuned for GC stick range (lower than desktop defaults) */
+        "+set j_pitch 0.015 "
+        "+set j_yaw -0.015 "
+        "+set j_forward -0.25 "
+        "+set j_side 0.25 "
+#if WII_STANDALONE
+        "+set com_standalone 1 "
+#else
         "+set com_standalone 0 "
+#endif
         /* Network: IPv4 only — Wii has no IPv6 stack */
         "+set net_enabled 1 "
         /* Use a non-server port so NAT hairpinning doesn't get confused
@@ -223,14 +234,24 @@ int main(int argc, char *argv[])
         "+set fraglimit 0 "
         "+set timelimit 0 "
         /* Force-flush qconsole.log after every write — ensures crash tail isn't lost */
-        "+set com_logfile 2"
+        "+set com_logfile 2 "
+        /* Default player name — overridden once the user sets their own in the menu */
+        "+set name Quake3Wii "
+        /* Hide any on-screen debug/perf text */
+        "+set cg_drawFPS 0 "
+        "+set cg_drawTimer 0 "
+        "+set cg_drawSnapshot 0 "
+        "+set com_speeds 0 "
+        "+set r_speeds 0"
     );
 
     /* Power/Reset buttons always return to HBC */
     SYS_SetPowerCallback(wii_power_cb);
     SYS_SetResetCallback(wii_reset_cb);
 
-    /* Create qkey file (2048 bytes) if missing — bypasses CD key dialog */
+#if !WII_STANDALONE
+    /* Create qkey file (2048 bytes) if missing — bypasses CD key dialog.
+     * Only needed for Quake III Arena; standalone games (OA) skip this. */
     {
         FILE *kf = fopen("sd:/quake3/qkey", "rb");
         if (kf) {
@@ -242,21 +263,20 @@ int main(int argc, char *argv[])
                 for (int i = 0; i < 2048; i++) buf[i] = (unsigned char)(i & 0xFF);
                 fwrite(buf, 1, 2048, kf);
                 fclose(kf);
-                printf("[wii] Created qkey file\n"); fflush(stdout);
+                WII_DBG_PRINTF("[wii] Created qkey file\n");
             }
         }
     }
+#endif
 
     boot_mark("Calling GX init");
-    printf("[wii] Calling Wii_GX_Init...\n"); fflush(stdout);
-    extern u32 SYS_GetArena1Size(void);
-    printf("[wii] Free arena1: %u KB\n", (unsigned)(SYS_GetArena1Size() / 1024)); fflush(stdout);
+    WII_DBG_PRINTF("[wii] Calling Wii_GX_Init...\n");
 
     /* GX must be up before Com_Init, because Com_Init → CL_Init →
      * BeginRegistration → BeginFrame start firing immediately.
      * Without GX initialised those frames render to nothing → black screen. */
     Wii_GX_Init();
-    printf("[wii] GX init done\n"); fflush(stdout);
+    WII_DBG_PRINTF("[wii] GX init done\n");
     boot_mark("GX init done");
 
     /* Pre-initialize the renderer export table before Com_Init so that
@@ -267,17 +287,14 @@ int main(int argc, char *argv[])
     if (ref) re = *ref;
     boot_mark("GetRefAPI done");
 
-    printf("[wii] Calling Com_Init...\n"); fflush(stdout);
+    WII_DBG_PRINTF("[wii] Calling Com_Init...\n");
     boot_mark("Calling Com_Init");
     Com_Init(cmdline);
-    printf("[wii] Com_Init done\n"); fflush(stdout);
+    WII_DBG_PRINTF("[wii] Com_Init done\n");
     boot_mark("Com_Init done");
     NET_Init();
-    printf("[wii] NET_Init done\n"); fflush(stdout);
 
-    /* Power button = emergency exit to HBC */
-    SYS_SetPowerCallback(wii_power_cb); /* default power callback exits cleanly */
-    SYS_SetResetCallback(wii_reset_cb);
+
 
     /* Main loop */
     int frame_count = 0;
@@ -289,32 +306,7 @@ int main(int argc, char *argv[])
             break;
         }
 
-        /* Check START on GC pad to return to HBC */
-        PAD_ScanPads();
-        if (PAD_ButtonsDown(0) & PAD_BUTTON_START) {
-            exit(0);
-        }
-
-        frame_count++;
-        if (frame_count == 1) {
-            printf("[wii] Entering Com_Frame #1\n"); fflush(stdout);
-        }
-        /* Write a marker every 100 frames so crash.txt shows which Com_Frame
-         * the crash occurred in (crash.txt uses atomic writes that survive DSI). */
-        if (frame_count % 100 == 0) {
-            char _fm[64]; snprintf(_fm, sizeof(_fm), "pre-frame %d", frame_count);
-            crash_mark(_fm);
-        }
-
         Com_Frame();
-
-        if (frame_count % 100 == 0) {
-            char _fm[64]; snprintf(_fm, sizeof(_fm), "post-frame %d", frame_count);
-            crash_mark(_fm);
-        }
-        if (frame_count == 1) {
-            printf("[wii] Com_Frame #1 done\n"); fflush(stdout);
-        }
     }
 
     /* Cleanup (usually unreachable – Q3 calls exit() itself) */

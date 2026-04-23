@@ -102,8 +102,6 @@ qboolean Wii_GX_Init(void)
     ogx_initialize();
 
     s_initialised = qtrue;
-    printf("[glimp] GX + OpenGX initialised (%dx%d)\n",
-           s_rmode->fbWidth, s_rmode->efbHeight);
     return qtrue;
 }
 

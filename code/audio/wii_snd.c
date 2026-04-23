@@ -88,7 +88,6 @@ void Wii_Snd_Init(void)
     ASND_Init();
     ASND_Pause(0);
     s_asnd_ready = qtrue;
-    printf("[snd] ASND_Init OK\n"); fflush(stdout);
 }
 
 void Wii_Snd_Shutdown(void)
@@ -109,21 +108,13 @@ void Wii_Snd_Shutdown(void)
  * -------------------------------------------------------------------------- */
 qboolean SNDDMA_Init(void)
 {
-    printf("[snd] SNDDMA_Init enter\n"); fflush(stdout);
-    boot_mark("SNDDMA_Init enter");
-
-    if (!s_asnd_ready) {
-        printf("[snd] SNDDMA_Init: ASND not ready\n");
+    if (!s_asnd_ready)
         return qfalse;
-    }
 
     s_buf = (u8 *)memalign(32, SND_BYTES);
-    if (!s_buf) {
-        printf("[snd] SNDDMA_Init: alloc FAILED\n");
+    if (!s_buf)
         return qfalse;
-    }
     memset(s_buf, 0, SND_BYTES);
-    boot_mark("SNDDMA_Init: buffer allocated");
 
     /*
      * Describe the ring to ioQ3's mixer.
@@ -143,8 +134,6 @@ qboolean SNDDMA_Init(void)
     /* Record start time before the first ASND pass begins. */
     s_cb_ticks = (u32)gettime();
 
-    printf("[snd] SNDDMA_Init: calling ASND_SetVoice\n"); fflush(stdout);
-    boot_mark("SNDDMA_Init: before ASND_SetVoice");
     ASND_SetVoice(SND_VOICE,
                   VOICE_STEREO_16BIT,
                   SND_FREQ,
@@ -152,13 +141,8 @@ qboolean SNDDMA_Init(void)
                   s_buf, SND_BYTES,
                   255, 255,     /* left/right volume (full) */
                   SndCallback);
-    boot_mark("SNDDMA_Init: after ASND_SetVoice");
 
     s_snd_init = qtrue;
-
-    printf("[snd] SNDDMA_Init OK (%d Hz, %d ch, %d-bit, buf=%d bytes)\n",
-           SND_FREQ, SND_CHANNELS, SND_SAMPLEBITS, SND_BYTES);
-    boot_mark("SNDDMA_Init OK");
     return qtrue;
 }
 
@@ -218,12 +202,6 @@ void SNDDMA_Submit(void)
 {
     if (!s_snd_init)
         return;
-
-    if (s_first_submit) {
-        s_first_submit = qfalse;
-        printf("[snd] SNDDMA_Submit first call\n"); fflush(stdout);
-        boot_mark("SNDDMA_Submit first call");
-    }
 
     DCFlushRange(s_buf, SND_BYTES);
 }

@@ -22,14 +22,13 @@
 
 #include "qcommon/q_shared.h"
 #include "qcommon/qcommon.h"
+/* Sys_* prototypes are declared in qcommon.h in modern ioQ3 —
+ * sys_public.h no longer exists as a separate file */
+#include "renderercommon/tr_types.h"  /* glconfig_t */
 #include "keycodes.h"
 /* Key_GetCatcher / KEYCATCH_UI */
 extern int Key_GetCatcher(void);
 #define KEYCATCH_UI 4
-#include "keycodes.h"
-/* Sys_* prototypes are declared in qcommon.h in modern ioQ3 —
- * sys_public.h no longer exists as a separate file */
-#include "renderercommon/tr_types.h"  /* glconfig_t */
 
 #include "wii_glimp.h"
 #include "../input/wii_input.h"
@@ -40,8 +39,7 @@ extern int Key_GetCatcher(void);
  * -------------------------------------------------------------------------- */
 void Sys_Init(void)
 {
-    printf("[wii] Sys_Init called\n"); fflush(stdout);
-    printf("[wii] Sys_Init done\n"); fflush(stdout);
+
 }
 
 void Sys_Quit(void)
@@ -64,9 +62,6 @@ int Sys_Milliseconds(void)
     if (++s_check >= 500) {
         s_check = 0;
 
-        /* PAD_Init is safe to call once regardless of which input backend is
-         * active.  Without it, PAD_ScanPads→PAD_Read would call a NULL SI
-         * callback and trigger an ISI exception on first call. */
         if (!s_pad_inited) {
             PAD_Init();
             s_pad_inited = qtrue;
@@ -78,13 +73,6 @@ int Sys_Milliseconds(void)
             exit(0);
         }
 
-        /* GC controller input (supplements IN_Frame which handles Wiimote/Nunchuk).
-         * Left stick  → movement (forward/back/strafe).
-         * C-stick     → look (SE_MOUSE).
-         * A           → attack (K_MOUSE1).
-         * B           → menu/escape.
-         * Z trigger   → jump.
-         * L/R         → strafe modifiers handled as direct keys if needed. */
         {
             s8 lx = PAD_StickX(0);
             s8 ly = PAD_StickY(0);
@@ -108,7 +96,7 @@ int Sys_Milliseconds(void)
                 }
             }
 
-            /* Left stick → movement keys (+forward/+back/+moveleft/+moveright) */
+            /* Left stick → movement keys */
             {
                 static qboolean s_fwd, s_back, s_left, s_right;
                 qboolean fwd   = ly >  DEAD;
@@ -134,10 +122,6 @@ int Sys_Milliseconds(void)
             if (down & PAD_TRIGGER_Z)    { Com_QueueEvent(0, SE_KEY, K_SPACE,   qtrue,  0, NULL); Com_EventLoop(); }
             if (up   & PAD_TRIGGER_Z)    { Com_QueueEvent(0, SE_KEY, K_SPACE,   qfalse, 0, NULL); Com_EventLoop(); }
         }
-
-        /* Do NOT call SCR_UpdateScreen here: Sys_Milliseconds is called from
-         * deep within ioQ3's frame/loading code, causing re-entrant GX rendering
-         * that corrupts GX state mid-frame and produces a red-screen DSI crash. */
     }
     return ms;
 }
@@ -315,11 +299,8 @@ void Sys_Print(const char *msg)
     fflush(stdout);
 }
 
-/* Called very early in Com_Init — add a canary print */
 cpuFeatures_t Sys_GetProcessorFeatures(void)
 {
-    printf("[wii] Sys_GetProcessorFeatures called\n");
-    fflush(stdout);
     return (cpuFeatures_t)0;
 }
 
@@ -358,9 +339,6 @@ void GLimp_Init(qboolean fixedFunction)
                "GL_ARB_multitexture GL_EXT_compiled_vertex_array",
                sizeof(glConfig.extensions_string));
 
-    printf("[glimp] GLimp_Init: %dx%d\n",
-           glConfig.vidWidth, glConfig.vidHeight);
-    fflush(stdout);
 }
 
 void GLimp_Shutdown(void)
@@ -528,8 +506,9 @@ void        S_DisableSounds(void)                                      { S_Base_
 /* Background music not implemented — Wii has no OGG/MP3 codec in this build */
 void        S_StartBackgroundTrack(const char *i,const char *l)       { (void)i;(void)l; }
 void        S_StopBackgroundTrack(void)                                { }
-/* Raw samples (cinematic audio) — stub for now */
-void        S_RawSamples(int stream,int samples,int rate,int width,int channels,const byte *d,float v,int e){ (void)stream;(void)samples;(void)rate;(void)width;(void)channels;(void)d;(void)v;(void)e; }
+/* Raw samples — forwards to S_Base_RawSamples (snd_dma.c) for cinematic audio */
+extern void S_Base_RawSamples(int stream, int samples, int rate, int width, int s_channels, const byte *data, float volume, int entityNum);
+void        S_RawSamples(int stream,int samples,int rate,int width,int channels,const byte *d,float v,int e){ S_Base_RawSamples(stream,samples,rate,width,channels,d,v,e); }
 
 qboolean CL_VideoRecording(void)               { return qfalse; }
 qboolean CL_OpenAVIForWriting(const char *f)   { (void)f; return qfalse; }
@@ -703,12 +682,8 @@ void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset)
 {
     (void)addr; (void)prot; (void)flags; (void)fd; (void)offset;
     void *p = wii_mem2_alloc(len);
-    if (p) {
-        printf("[wii] mmap(%u) -> MEM2 %p\n", (unsigned)len, p); fflush(stdout);
-        return p;
-    }
+    if (p) return p;
     p = memalign(32, len);
-    printf("[wii] mmap(%u) -> MEM1 %p\n", (unsigned)len, p); fflush(stdout);
     return p ? p : (void *)-1;
 }
 
@@ -755,12 +730,24 @@ static u8   *mem2_ptr  = NULL;
 static u32   mem2_left = 0;
 
 /* Bump allocator lives at the TOP of MEM2.
- * Bump region: top 32 MB (enough for com_hunkMegs=28 with headroom).
- * _sbrk_r uses Arena2 from the bottom up; the bump region at the top gives
- * ~20 MB of Arena2 for ordinary malloc/free before any collision risk.
- * We do NOT call SYS_SetArena2Hi — restricting Arena2Hi starves _sbrk_r
- * and breaks large calloc fallback paths. */
-#define MEM2_BUMP_SIZE (36u * 1024u * 1024u)
+ * Bump region: top 36 MB (enough for com_hunkMegs=32 with headroom).
+ * _sbrk_r uses Arena2 from the bottom up to mem2_base.
+ *
+ * CRITICAL: SYS_SetArena2Hi must be called to cap the sbrk heap.
+ * Without it, newlib's _sbrk_r can grow past mem2_base into the bump
+ * region, overwriting the hunk.  OpenGX's memalign calls for texture
+ * storage are the primary consumer; during map load they can push the
+ * sbrk heap past 16 MB, corrupting hunk-resident data like the shader
+ * hash table (observed as DSI in FindShaderInShaderText).
+ *
+ * Originally 36 MB, reduced to 33 MB to give sbrk ~3 MB more headroom.
+ * The hunk (com_hunkMegs 32) needs ~32 MB + alignment from the bump.
+ * 33 MB provides sufficient margin.  The extra sbrk space is needed
+ * because OpenGX allocates texture pixel buffers via memalign() from
+ * the sbrk heap; during a server connect, R_DeleteTextures frees menu
+ * textures and the map+cgame reload allocates 200+ new textures,
+ * which exhausts a 16 MB sbrk heap after heap fragmentation. */
+#define MEM2_BUMP_SIZE (33u * 1024u * 1024u)
 
 void Wii_MEM2_Init(void)
 {
@@ -778,11 +765,11 @@ void Wii_MEM2_Init(void)
         mem2_left = total;
     }
 
-    printf("[wii] MEM2: total=%uKB  bump=[%p,%p) %uKB  sbrk=[%p,%p)\n",
-           total / 1024,
-           mem2_base, hi, mem2_left / 1024,
-           lo, mem2_base);
-    fflush(stdout);
+    /* Cap the sbrk heap so _sbrk_r cannot grow into the bump region.
+     * This gives sbrk (mem2_base - lo) bytes, roughly 16 MB with the
+     * default linker script.  OpenGX textures at r_picmip 2 should fit
+     * well within this budget. */
+    SYS_SetArena2Hi(mem2_base);
 }
 
 
@@ -798,6 +785,35 @@ void *wii_mem2_alloc(size_t size)
     return NULL;
 }
 
+/* ---- memalign guard zone / free wrapper -----------------------------------
+ *
+ * DISABLED: --wrap,free and --wrap,memalign were removed from LDFLAGS.
+ * The pre-Wiimote backup (which works) did not have these wraps.
+ * Adding them changes every memalign allocation size (+256 bytes) and
+ * intercepts every free() system-wide, which can cause memory exhaustion
+ * or silent no-op frees if s_leak_tex gets stuck.
+ *
+ * The underlying OpenGX TexelRGBA8 overflow should be fixed in OpenGX
+ * itself rather than papered over with allocation guards.
+ * ----------------------------------------------------------------------- */
+#if 0
+extern void *__real_memalign(size_t align, size_t size);
+void *__wrap_memalign(size_t align, size_t size)
+{
+    return __real_memalign(align, size + 256);
+}
+
+extern void __real_free(void *ptr);
+static volatile int s_leak_tex = 0;
+void Wii_BeginLeakTextures(void) { s_leak_tex = 1; }
+void Wii_EndLeakTextures(void)   { s_leak_tex = 0; }
+void __wrap_free(void *ptr)
+{
+    if (ptr && s_leak_tex) return;
+    __real_free(ptr);
+}
+#endif
+
 /* Route large calloc (≥16 MB) to the MEM2 bump allocator.
  * Only ioQ3's Hunk_Init calls calloc this large (calloc(40MB+31,1)).
  * The bump allocator never frees, which is safe: the hunk is never freed. */
@@ -810,12 +826,8 @@ void *__wrap_calloc(size_t nmemb, size_t size)
         void *p = wii_mem2_alloc(total);
         if (p) {
             memset(p, 0, total);
-            printf("[wii] calloc(%u) -> MEM2 bump %p\n", (unsigned)total, p);
-            fflush(stdout);
             return p;
         }
-        printf("[wii] calloc(%u): MEM2 bump full! falling back\n", (unsigned)total);
-        fflush(stdout);
     }
     return __real_calloc(nmemb, size);
 }
@@ -831,11 +843,7 @@ extern void __real_SV_Init(void);
  * Log file approach: write before call, check if "done" appears. */
 void __wrap_SV_Init(void)
 {
-    FILE *f = fopen("sd:/quake3/svinit.txt", "w");
-    if (f) { fprintf(f, "SV_Init: entering\n"); fflush(f); fclose(f); }
     __real_SV_Init();
-    f = fopen("sd:/quake3/svinit.txt", "a");
-    if (f) { fprintf(f, "SV_Init: done\n"); fflush(f); fclose(f); }
 }
 
 /* Com_Printf wrap — mirror all engine output to SD card log.
@@ -848,18 +856,8 @@ void QDECL __wrap_Com_Printf(const char *fmt, ...)
     char buf[1024];
     va_list ap;
     va_start(ap, fmt);
-    Q_vsnprintf(buf, sizeof(buf), fmt, ap);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-
-    /* Write to SD FIRST — before calling real Com_Printf.
-     * If the real implementation crashes (e.g. CL_ConsolePrint, Sys_Print),
-     * we still capture the message on SD so we know what was printed last. */
-    static int log_lines = 0;
-    if (log_lines < 4000) {
-        FILE *f = fopen("sd:/quake3/comlog.txt", "a");
-        if (f) { fputs(buf, f); fclose(f); }
-        log_lines++;
-    }
 
     /* Forward to the real implementation (console, etc.) */
     __real_Com_Printf("%s", buf);
@@ -874,7 +872,6 @@ void Wii_VM_Yield(void)
 
     PAD_ScanPads();
     if (PAD_ButtonsDown(0) & PAD_BUTTON_START) {
-        printf("[wii] START in VM yield, exiting\n"); fflush(stdout);
         exit(0);
     }
 }
@@ -883,7 +880,6 @@ void Wii_VM_Yield(void)
  * the key already exists. The dialog is shown when qkey is missing. */
 void __wrap_CL_GenerateQKey(void)
 {
-    printf("[wii] CL_GenerateQKey skipped\n"); fflush(stdout);
     /* Do nothing — this prevents the CD key dialog from appearing */
 }
 
@@ -919,9 +915,6 @@ intptr_t QDECL __wrap_VM_Call( void *vm, int callnum, ... )
      * Log the callnum so we can identify the root cause, then return a
      * safe zero rather than crashing with "VM_Call with NULL vm". */
     if (!vm) {
-        printf("[wii] VM_Call(NULL, callnum=%d, args[0]=%d) suppressed\n",
-               callnum, args[0]);
-        fflush(stdout);
         return 0;
     }
 
@@ -929,4 +922,51 @@ intptr_t QDECL __wrap_VM_Call( void *vm, int callnum, ... )
         args[0], args[1], args[2], args[3],
         args[4], args[5], args[6], args[7],
         args[8], args[9], args[10], args[11]);
+}
+
+/* ========================================================================
+ * Newlib malloc thread-safety — required when BTE (Bluetooth) is linked.
+ *
+ * WPAD (libwiiuse) runs a background LWP thread for Bluetooth/Wiimote
+ * communication that calls the standard libc malloc/free.
+ * Newlib's _malloc_r / _free_r are NOT thread-safe by default — they rely
+ * on the application providing __malloc_lock / __malloc_unlock.  Without
+ * these, concurrent heap operations from the WPAD thread and the main
+ * thread corrupt the free-list, causing DSI crashes in _malloc_r / _free_r.
+ *
+ * We replicate libogc's own __syscall_malloc_lock pattern: a recursive
+ * LWP_Mutex that properly integrates with the LWP thread scheduler.
+ * IRQ_Disable alone is not sufficient because LWP threads can also be
+ * cooperatively scheduled (e.g. after IOS syscalls, semaphore waits),
+ * not only via the timer interrupt.
+ *
+ * The mutex is initialised lazily on first use (before any LWP thread
+ * has been created, so the first call is inherently single-threaded).
+ * ======================================================================== */
+#include <ogc/mutex.h>
+
+static mutex_t s_malloc_mtx = LWP_MUTEX_NULL;
+
+/* Called from main() before WPAD_Init to guarantee the mutex exists
+ * before any background thread can call malloc.  The lazy path in
+ * __wrap___malloc_lock is a safety net only. */
+void Wii_InitMallocLock(void)
+{
+    if (s_malloc_mtx == LWP_MUTEX_NULL)
+        LWP_MutexInit(&s_malloc_mtx, true);     /* recursive */
+}
+
+void __wrap___malloc_lock(struct _reent *r)
+{
+    (void)r;
+    if (s_malloc_mtx == LWP_MUTEX_NULL)
+        LWP_MutexInit(&s_malloc_mtx, true);     /* lazy fallback */
+    LWP_MutexLock(s_malloc_mtx);
+}
+
+void __wrap___malloc_unlock(struct _reent *r)
+{
+    (void)r;
+    if (s_malloc_mtx != LWP_MUTEX_NULL)
+        LWP_MutexUnlock(s_malloc_mtx);
 }

@@ -5,9 +5,6 @@
 #pragma once
 #include "qcommon/q_shared.h"
 
-/* Defined in wii_main.c; available after fatInitDefault() succeeds. */
-extern void boot_mark(const char *msg);
-
 void Wii_Snd_Init(void);
 void Wii_Snd_Shutdown(void);
 

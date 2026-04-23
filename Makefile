@@ -20,6 +20,13 @@ include $(DEVKITPPC)/wii_rules
 INPUT_BACKEND ?= wiimote
 
 #---------------------------------------------------------------------------------
+# Game mode: baseq3 (default) or baseoa (OpenArena)
+#   make                     → Quake III Arena (reads sd:/quake3/baseq3/)
+#   make GAMEMODE=baseoa     → OpenArena       (reads sd:/quake3/baseoa/)
+#---------------------------------------------------------------------------------
+GAMEMODE ?= baseq3
+
+#---------------------------------------------------------------------------------
 # Project identity
 #---------------------------------------------------------------------------------
 TARGET      := ioquake3_wii
@@ -44,6 +51,7 @@ INCLUDES    := code
 #---------------------------------------------------------------------------------
 OPENGX_INC  := $(DEVKITPRO)/portlibs/wii/include
 OPENGX_LIB  := $(DEVKITPRO)/portlibs/wii/lib
+OPENGX_SRC  := ../opengx/src
 
 #---------------------------------------------------------------------------------
 # ioQuake3 source directories
@@ -208,9 +216,24 @@ ZCONF_H_COPY := $(IOQ3_DIR)/code/qcommon/zconf.h
 
 #---------------------------------------------------------------------------------
 # Compiler flags
+#   make WII_DEBUG=1 → enables SD card logging (boot.txt, crash.txt, comlog.txt)
 #---------------------------------------------------------------------------------
+ifeq ($(WII_DEBUG),1)
+  WII_DEBUG_FLAG := -DWII_DEBUG
+else
+  WII_DEBUG_FLAG :=
+endif
+
+ifeq ($(GAMEMODE),baseq3)
+  GAMEMODE_FLAGS := -DWII_BASEGAME=\"baseq3\" -DWII_STANDALONE=0
+else
+  GAMEMODE_FLAGS := -DWII_BASEGAME=\"$(GAMEMODE)\" -DWII_STANDALONE=1
+endif
+
 CFLAGS  = $(MACHDEP) \
           -pipe -O2 -Wall -Wno-unused-variable -Wno-missing-braces -Wno-cpp \
+          $(WII_DEBUG_FLAG) \
+          $(GAMEMODE_FLAGS) \
           -msdata=none -G 0 \
           -DGEKKO -DWII \
           -DMAX_CLIENTS=8 \
@@ -234,7 +257,7 @@ CFLAGS  = $(MACHDEP) \
 
 CXXFLAGS = $(CFLAGS)
 
-LDFLAGS = $(MACHDEP) -Wl,-Map,$(BUILD)/ioquake3_wii.elf.map -Wl,--wrap,SV_Init -Wl,--wrap,CL_GenerateQKey -Wl,--wrap,VM_Call -Wl,--wrap,Com_Printf -Wl,--wrap,calloc -G 0 -T rvl.ld
+LDFLAGS = $(MACHDEP) -Wl,-Map,$(BUILD)/ioquake3_wii.elf.map -Wl,--wrap,SV_Init -Wl,--wrap,CL_GenerateQKey -Wl,--wrap,VM_Call -Wl,--wrap,Com_Printf -Wl,--wrap,calloc -Wl,--wrap,__malloc_lock -Wl,--wrap,__malloc_unlock -G 0 -T rvl.ld
 
 ifeq ($(INPUT_BACKEND),gamecube)
   LIBS  = -L$(LIBOGC_LIB) -L$(OPENGX_LIB) -lopengx -Wl,--start-group -lasnd -logc -ldi -lfat -lm -Wl,--end-group $(ZLIB_LIBS) -L$(PORTLIBS)/lib -ljpeg
@@ -245,6 +268,14 @@ endif
 #---------------------------------------------------------------------------------
 # Source collection
 #---------------------------------------------------------------------------------
+# Patched OpenGX source — disabled for now to match the working backup exactly.
+# The format-change realloc fix is correct but we need to confirm the stock
+# library works first before re-enabling.
+#---------------------------------------------------------------------------------
+#OGX_PATCHED_SRCS := $(OPENGX_SRC)/texture.c
+#OGX_PATCHED_OBJS := $(patsubst $(OPENGX_SRC)/%.c,$(BUILD)/opengx/%.o,$(OGX_PATCHED_SRCS))
+OGX_PATCHED_OBJS :=
+
 SOURCES_NO_INPUT := $(filter-out code/input,$(SOURCES))
 WII_C_SRCS   := $(foreach dir,$(SOURCES_NO_INPUT),$(wildcard $(dir)/*.c)) \
                 $(WII_INPUT_SRC)
@@ -252,7 +283,8 @@ WII_CPP_SRCS := $(foreach dir,$(SOURCES_NO_INPUT),$(wildcard $(dir)/*.cpp))
 ALL_SRCS     := $(WII_C_SRCS) $(WII_CPP_SRCS) $(IOQ3_SRCS) $(IOQ3_ZLIB_SRCS)
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(filter %.c,$(ALL_SRCS))) \
-        $(patsubst %.cpp,$(BUILD)/%.o,$(filter %.cpp,$(ALL_SRCS)))
+        $(patsubst %.cpp,$(BUILD)/%.o,$(filter %.cpp,$(ALL_SRCS))) \
+        $(OGX_PATCHED_OBJS)
 
 #---------------------------------------------------------------------------------
 # Build rules
@@ -281,6 +313,14 @@ $(BUILD)/code/%.o: code/%.c
 	@mkdir -p $(dir $@)
 	@echo "CC $<"
 	$(CC) $(CFLAGS) -DWII_INCLUDE_NET -c $< -o $@
+
+# Patched OpenGX sources — built with OpenGX's own internal include path.
+# The -include wii_platform.h is removed (not compatible with OpenGX internals)
+# and replaced with the minimal flags OpenGX needs.
+$(BUILD)/opengx/%.o: $(OPENGX_SRC)/%.c
+	@mkdir -p $(dir $@)
+	@echo "CC (opengx) $<"
+	$(CC) $(MACHDEP) -pipe -O2 -Wall -Wno-unused-variable -msdata=none -G 0 -DGEKKO -I$(OPENGX_SRC) -I$(OPENGX_INC) -I$(LIBOGC_INC) -c $< -o $@
 
 $(BUILD)/$(IOQ3_DIR)/code/client/cl_ui.o: $(IOQ3_DIR)/code/client/cl_ui.c
 	@mkdir -p $(dir $@)

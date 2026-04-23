@@ -233,8 +233,6 @@ extern refexport_t *tr_init_GetRefAPI_unused(int apiVersion, refimport_t *rimp);
 
 refexport_t *GetRefAPI(int apiVersion, refimport_t *rimp)
 {
-    printf("[re] GetRefAPI(rimp=%p)\n", (void *)rimp); fflush(stdout);
-
     /* Always refresh our manual ri callbacks first */
     wii_ri_init();
 
@@ -244,12 +242,10 @@ refexport_t *GetRefAPI(int apiVersion, refimport_t *rimp)
 
     if (!rimp) {
         /* Pre-boot call: return the safe no-op stub */
-        printf("[re] pre-boot stub returned\n"); fflush(stdout);
         return &wii_re;
     }
 
     /* Real init: activate OpenGX and hand off to the real renderer */
-    printf("[re] activating OpenGX renderer\n"); fflush(stdout);
     QGL_Init();
 
     return tr_init_GetRefAPI_unused(apiVersion, &ri);

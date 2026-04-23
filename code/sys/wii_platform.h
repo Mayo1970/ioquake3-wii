@@ -203,6 +203,29 @@ static inline int mprotect(void *addr, size_t len, int prot) {
 #undef COLOR_ORANGE
 
 /* ----------------------------------------------------------------
+ * Diagnostic logging — writes to sd:/quake3/diag.txt.
+ * Only active when WII_DEBUG is defined (make WII_DEBUG=1).
+ * ---------------------------------------------------------------- */
+#include <stdio.h>
+#include <stdarg.h>
+#ifdef WII_DEBUG
+static inline void wii_diag(const char *fmt, ...) __attribute__((format(printf,1,2)));
+static inline void wii_diag(const char *fmt, ...) {
+    FILE *f = fopen("sd:/quake3/diag.txt", "a");
+    if (f) {
+        va_list ap;
+        va_start(ap, fmt);
+        vfprintf(f, fmt, ap);
+        va_end(ap);
+        fflush(f);
+        fclose(f);
+    }
+}
+#else
+#define wii_diag(...) ((void)0)
+#endif
+
+/* ----------------------------------------------------------------
  * GL compatibility — intercept SDL_opengl.h include from qgl.h.
  * We define USE_INTERNAL_SDL_HEADERS so qgl.h tries to include
  * "SDL_opengl.h" (quoted), then we satisfy that with our stub

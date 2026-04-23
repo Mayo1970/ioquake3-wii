@@ -65,8 +65,6 @@ static void noop_CopyTexSubImage2D(GLenum tgt, GLint lvl,
  * -------------------------------------------------------------------------- */
 void QGL_Init(void)
 {
-    printf("[qgl] QGL_Init: wiring qgl* -> OpenGX gl*\n"); fflush(stdout);
-
     /* ---- QGL_1_1_PROCS ---- */
     qglBindTexture        = glBindTexture;
     qglBlendFunc          = glBlendFunc;
@@ -151,7 +149,6 @@ void QGL_Init(void)
     qglLockArraysEXT   = NULL;
     qglUnlockArraysEXT = NULL;
 
-    printf("[qgl] QGL_Init done\n"); fflush(stdout);
 }
 
 void QGL_Shutdown(void)
