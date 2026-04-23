@@ -15,6 +15,7 @@ using devkitPPC + libogc and [OpenGX](https://github.com/devkitPro/opengx)
 **Known issues:**
 
 - Wiimote + Nunchuk input is **not working** at this time
+- Single player/Wii hosting is **not working** at this time. Only Online/LAN multiplayer servers work.
 
 ## Prerequisites (Windows)
 
