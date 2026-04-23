@@ -1,7 +1,7 @@
 # ioquake3-wii
 
 A port of [ioQuake3](https://github.com/ioquake/ioq3) to the Nintendo Wii,
-using devkitPPC + libogc and [OpenGX](https://github.com/nicoya/opengx)
+using devkitPPC + libogc and [OpenGX](https://github.com/devkitPro/opengx)
 (OpenGL 1.x to GX translation layer).
 
 ## Status
