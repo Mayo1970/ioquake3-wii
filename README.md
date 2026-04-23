@@ -201,7 +201,6 @@ GameCube controller backend (`INPUT_BACKEND=gamecube`) instead.
 Use the in-game server browser (internet + LAN).
 
 ---
-<<<<<<< HEAD
 
 ## Memory budget
 
@@ -214,7 +213,6 @@ Use the in-game server browser (internet + LAN).
 | GX FIFO | 256 KB | MEM1 | Command buffer |
 | Framebuffers | ~2.4 MB | MEM1 | Two XFB at 640x480 |
 | Stack | 512 KB | MEM1 | Overridden from 16 KB default |
-=======
 ## Known missing pieces (v0.1)
 
 - [ ] IR (Wiimote pointer) mouselook
