@@ -163,7 +163,9 @@ void Wii_Input_Init(void)
     s_old_ltrig = s_old_rtrig = qfalse;
     memset(s_old_axis, 0, sizeof(s_old_axis));
     PAD_Init();
+#ifdef WII_DEBUG
     printf("[input] GameCube PAD initialised (dual-stick)\n");
+#endif
 }
 
 void Wii_Input_Frame(void)

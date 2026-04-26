@@ -1,4 +1,4 @@
-# ioquake3-wii v0.3.0
+# ioQuake3-Wii
 
 A port of [ioQuake3](https://github.com/ioquake/ioq3) to the Nintendo Wii,
 using devkitPPC + libogc and [OpenGX](https://github.com/devkitPro/opengx)
@@ -11,10 +11,8 @@ using devkitPPC + libogc and [OpenGX](https://github.com/devkitPro/opengx)
 - Networking works (Wi-Fi, LAN discovery, internet server browser)
 - GameCube controller with dual-stick analog input
 - Wiimote + Nunchuk with IR pointer aiming
-
-**Known issues:**
-
-- Single player / Wii hosting is untested. Online and LAN multiplayer servers work.
+- Bot support (AI opponents, works offline and on hosted servers)
+- Local server hosting
 
 ## Prerequisites (Windows)
 
@@ -72,20 +70,14 @@ collide with the Wii port's own definitions. It only needs to be run once.
 ### Step 2 -- Build
 
 ```bash
-# Quake III Arena, Wiimote + Nunchuk (default)
+# Wiimote + Nunchuk (default)
 make dol
 
-# Quake III Arena, GameCube controller
+# GameCube controller
 make INPUT_BACKEND=gamecube dol
 
-# OpenArena, Wiimote + Nunchuk
-make GAMEMODE=baseoa dol
-
-# OpenArena, GameCube controller
-make INPUT_BACKEND=gamecube GAMEMODE=baseoa dol
-
 # Debug build (enables SD card diagnostic logging)
-make INPUT_BACKEND=gamecube WII_DEBUG=1 dol
+make WII_DEBUG=1 dol
 ```
 
 **Build flags:**
@@ -93,19 +85,16 @@ make INPUT_BACKEND=gamecube WII_DEBUG=1 dol
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
 | `INPUT_BACKEND` | `wiimote`, `gamecube` | `wiimote` | Controller input backend |
-| `GAMEMODE` | `baseq3`, `baseoa` | `baseq3` | Game data directory to use |
 | `WII_DEBUG` | `0`, `1` | `0` | Enable diagnostic logging to SD card |
 
 **Output:** `build/ioquake3_wii.dol`
 
-> **Note:** When switching between `GAMEMODE` or `INPUT_BACKEND` values, run
-> `make clean` first to ensure all objects are rebuilt with the correct flags.
+> **Note:** When switching `INPUT_BACKEND`, run `make clean` first to ensure
+> all objects are rebuilt with the correct flags.
 
 ---
 
 ## SD card layout
-
-### Quake III Arena (default)
 
 ```
 SD:/
@@ -123,26 +112,6 @@ SD:/
 
 **You need the original Quake III Arena data files** (`pak0.pk3` through
 `pak8.pk3`). The demo pk3 files will also work for testing.
-
-### OpenArena (`GAMEMODE=baseoa`)
-
-```
-SD:/
-├── apps/
-│   └── ioquake3/
-│       ├── boot.dol      ← build/ioquake3_wii.dol (built with GAMEMODE=baseoa)
-│       └── meta.xml
-└── quake3/
-    └── baseoa/
-        ├── pak0.pk3      ← from OpenArena download
-        ├── pak1.pk3
-        ├── ...
-        └── pak6.pk3
-```
-
-[OpenArena](http://www.openarena.ws) is a free, standalone game using the
-Quake III engine. Download the game data and place the `baseoa/` pk3 files
-on the SD card as shown above.
 
 ---
 
@@ -225,6 +194,15 @@ input falls back to the GameCube controller automatically.
 
 ---
 
+## Bots
+
+Bot AI opponents work in both local and hosted games. Use the in-game
+menus to start a local match and add bots (Start New Server → select map
+→ add bots). Up to 7 bots can be active at once (`MAX_CLIENTS=8`, minus
+the local player).
+
+---
+
 ## Connecting to a server
 
 Use the in-game server browser (internet + LAN).
@@ -246,7 +224,6 @@ Use the in-game server browser (internet + LAN).
 
 - [ ] On-screen keyboard for console input
 - [ ] Classic Controller support
-- [ ] Single player / local server hosting
 
 ---
 

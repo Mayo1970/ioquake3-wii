@@ -538,9 +538,13 @@ void Wii_Input_Init(void)
     WPAD_SetVRes(WPAD_CHAN_0, 640, 480);
     WPAD_SetIdleTimeout(300); /* 5 minutes before auto-disconnect */
 
+#ifdef WII_DEBUG
     printf("[input] Wiimote+Nunchuk initialised (IR aiming)\n");
+#endif
 #else
+#ifdef WII_DEBUG
     printf("[input] GameCube PAD initialised (dual-stick)\n");
+#endif
 #endif
 }
 

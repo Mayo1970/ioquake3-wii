@@ -8,7 +8,7 @@
   <long_description>
     ioQuake3 Wii port via devkitPPC + libogc + OpenGX.
     Requires Quake III Arena data files (pak0.pk3 - pak8.pk3)
-    or OpenArena data files placed at sd:/quake3/baseq3/ (or baseoa/).
+    placed at sd:/quake3/baseq3/.
 
     Supports GameCube controller (dual-stick) and
     Wiimote + Nunchuk (IR pointer aiming).

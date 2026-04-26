@@ -52,7 +52,9 @@ static qboolean Wii_MountSD(void)
         printf("[wii] fatInitDefault() failed – no SD card?\n");
         return qfalse;
     }
+#ifdef WII_DEBUG
     printf("[wii] SD card mounted OK\n");
+#endif
     chdir("sd:/quake3");
     return qtrue;
 }
@@ -157,11 +159,7 @@ int main(int argc, char *argv[])
         "+set j_yaw -0.015 "
         "+set j_forward -0.25 "
         "+set j_side 0.25 "
-#if WII_STANDALONE
-        "+set com_standalone 1 "
-#else
         "+set com_standalone 0 "
-#endif
         "+set net_enabled 1 "
         "+set net_port 27961 "
         "+set fraglimit 0 "
@@ -178,8 +176,7 @@ int main(int argc, char *argv[])
     SYS_SetPowerCallback(wii_power_cb);
     SYS_SetResetCallback(wii_reset_cb);
 
-#if !WII_STANDALONE
-    /* Create qkey (2048 bytes) if missing — bypasses CD key dialog */
+    /* Create qkey (2048 bytes) if missing — needed for cl_guid */
     {
         FILE *kf = fopen("sd:/quake3/qkey", "rb");
         if (kf) {
@@ -195,7 +192,6 @@ int main(int argc, char *argv[])
             }
         }
     }
-#endif
 
     boot_mark("Calling GX init");
     WII_DBG_PRINTF("[wii] Calling Wii_GX_Init...\n");

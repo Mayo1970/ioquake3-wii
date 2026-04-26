@@ -661,12 +661,15 @@ void __wrap_CL_GenerateQKey(void)
 {
 }
 
-/* VM_Call wrap — intercept CD key checks and UIMENU_NEED_CD */
+/* VM_Call wrap — intercept CD key checks and UIMENU_NEED_CD (UI VM only).
+ * Callnum enums overlap across VMs (e.g. BOTAI_START_FRAME = UI_HASUNIQUECDKEY = 10),
+ * so we must check vm == uivm before applying UI-specific intercepts. */
 #define WII_UI_SET_ACTIVE_MENU  7
 #define WII_UI_HASUNIQUECDKEY   10
 #define WII_UIMENU_MAIN         1
 #define WII_UIMENU_NEED_CD      3
 
+extern void *uivm;
 intptr_t QDECL __real_VM_Call( void *vm, int callnum, ... );
 
 intptr_t QDECL __wrap_VM_Call( void *vm, int callnum, ... )
@@ -677,17 +680,15 @@ intptr_t QDECL __wrap_VM_Call( void *vm, int callnum, ... )
     for (int i = 0; i < 12; i++) args[i] = va_arg(ap, int);
     va_end(ap);
 
-    if (callnum == WII_UI_HASUNIQUECDKEY) {
-        return 1;
+    if (vm == uivm) {
+        if (callnum == WII_UI_HASUNIQUECDKEY)
+            return 1;
+        if (callnum == WII_UI_SET_ACTIVE_MENU && args[0] == WII_UIMENU_NEED_CD)
+            args[0] = WII_UIMENU_MAIN;
     }
 
-    if (callnum == WII_UI_SET_ACTIVE_MENU && args[0] == WII_UIMENU_NEED_CD) {
-        args[0] = WII_UIMENU_MAIN;
-    }
-
-    if (!vm) {
+    if (!vm)
         return 0;
-    }
 
     return __real_VM_Call(vm, callnum,
         args[0], args[1], args[2], args[3],

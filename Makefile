@@ -11,9 +11,6 @@ include $(DEVKITPPC)/wii_rules
 # Input backend
 INPUT_BACKEND ?= wiimote
 
-# Game mode
-GAMEMODE ?= baseq3
-
 # Project identity
 TARGET      := ioquake3_wii
 BUILD       := build
@@ -198,11 +195,7 @@ else
   WII_DEBUG_FLAG :=
 endif
 
-ifeq ($(GAMEMODE),baseq3)
-  GAMEMODE_FLAGS := -DWII_BASEGAME=\"baseq3\" -DWII_STANDALONE=0
-else
-  GAMEMODE_FLAGS := -DWII_BASEGAME=\"$(GAMEMODE)\" -DWII_STANDALONE=1
-endif
+GAMEMODE_FLAGS := -DWII_BASEGAME=\"baseq3\"
 
 CFLAGS  = $(MACHDEP) \
           -pipe -O2 -Wall -Wno-unused-variable -Wno-missing-braces -Wno-cpp \
