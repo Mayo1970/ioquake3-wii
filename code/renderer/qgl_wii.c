@@ -1,68 +1,14 @@
-/*
- * qgl_wii.c — Wire ioQ3's qgl* function pointers to OpenGX.
- *
- * QGL_Init() is called once from GetRefAPI (wii_renderer.c) when the engine
- * hands us a real refimport_t.  After this call every qgl* pointer is live
- * and the full renderergl1 pipeline (tr_backend, tr_shade, tr_image, …) works
- * through OpenGX → GX hardware.
- *
- * Only the qgl* pointers that exist in ioQ3's qgl.h GLE macro groups are
- * assigned here.  Functions that are not in those groups (qglFogf, qglRotatef,
- * qglNormal3f, etc.) are NOT referenced by renderergl1 and are therefore not
- * wired.
- *
- * No-op stubs cover GL features that GX hardware cannot express:
- *   DrawBuffer, PolygonMode            — no draw-buffer select / wireframe
- *   CopyTexImage2D / CopyTexSubImage2D — EFB-to-texture not needed by Q3
- */
+/* qgl_wii.c — Wire ioQ3's qgl* function pointers to OpenGX. */
 
-#include "tr_local.h"   /* gives us qgl* externs + proc typedefs */
+#include "tr_local.h"
 
-/* --------------------------------------------------------------------------
- * No-op stubs
- * -------------------------------------------------------------------------- */
 static void noop_DrawBuffer  (GLenum m)             { (void)m; }
 static void noop_PolygonMode (GLenum f, GLenum m)   { (void)f; (void)m; }
-
-/* --------------------------------------------------------------------------
- * CMPR (DXT1) texture upload intercept
- *
- * OpenGX's glTexImage2D internally calls _ogx_convert_rgb_image_to_DXT1 when
- * the internal format is GL_COMPRESSED_RGB, producing GX_TF_CMPR textures
- * that the GX hardware decodes directly — 4× smaller than GX_TF_RGB565.
- *
- * We redirect opaque GL_RGB uploads to GL_COMPRESSED_RGB so every eligible
- * world and model texture gets compressed automatically at load time.
- * Textures with alpha (GL_RGBA / GL_LUMINANCE_ALPHA etc.) are left alone.
- * -------------------------------------------------------------------------- */
-static void wii_TexImage2D(GLenum target, GLint level, GLint internalformat,
-                           GLsizei width, GLsizei height, GLint border,
-                           GLenum format, GLenum type, const GLvoid *pixels)
-{
-    if (format == GL_RGB && type == GL_UNSIGNED_BYTE &&
-        internalformat == GL_RGB && pixels != NULL) {
-        internalformat = GL_COMPRESSED_RGB;
-    }
-    glTexImage2D(target, level, internalformat, width, height, border,
-                 format, type, pixels);
-}
 
 static void noop_CopyTexSubImage2D(GLenum tgt, GLint lvl,
     GLint xo, GLint yo, GLint x, GLint y, GLsizei w, GLsizei h)
 { (void)tgt;(void)lvl;(void)xo;(void)yo;(void)x;(void)y;(void)w;(void)h; }
 
-/* OpenGX (Mesa 7.0 API) provides the standard double-precision signatures
- * for glFrustum/glOrtho/glDepthRange/glClearDepth — no float-variant wrappers
- * needed.  The assignments below go directly to the gl* symbols. */
-
-/* --------------------------------------------------------------------------
- * QGL_Init — assign qgl* pointers.
- * Covers only the procs declared in qgl.h's GLE macro groups:
- *   QGL_1_1_PROCS, QGL_1_1_FIXED_FUNCTION_PROCS,
- *   QGL_DESKTOP_1_1_PROCS, QGL_DESKTOP_1_1_FIXED_FUNCTION_PROCS
- * plus the ARB multitexture / CVA pointers declared manually in
- * wii_gl_stubs.c.
- * -------------------------------------------------------------------------- */
 void QGL_Init(void)
 {
     /* ---- QGL_1_1_PROCS ---- */
@@ -72,7 +18,7 @@ void QGL_Init(void)
     qglClearColor         = glClearColor;
     qglClearStencil       = glClearStencil;
     qglColorMask          = glColorMask;
-    qglCopyTexSubImage2D  = noop_CopyTexSubImage2D; /* EFB readback not needed */
+    qglCopyTexSubImage2D  = noop_CopyTexSubImage2D;
     qglCullFace           = glCullFace;
     qglDeleteTextures     = glDeleteTextures;
     qglDepthFunc          = glDepthFunc;
@@ -121,8 +67,8 @@ void QGL_Init(void)
     /* ---- QGL_DESKTOP_1_1_PROCS ---- */
     qglClearDepth         = glClearDepth;
     qglDepthRange         = glDepthRange;
-    qglDrawBuffer         = noop_DrawBuffer;  /* GX has no draw-buffer select */
-    qglPolygonMode        = noop_PolygonMode; /* GX has no wireframe mode     */
+    qglDrawBuffer         = noop_DrawBuffer;
+    qglPolygonMode        = noop_PolygonMode;
 
     /* ---- QGL_DESKTOP_1_1_FIXED_FUNCTION_PROCS ---- */
     qglArrayElement       = glArrayElement;
@@ -139,13 +85,12 @@ void QGL_Init(void)
     qglVertex3f           = glVertex3f;
     qglVertex3fv          = glVertex3fv;
 
-    /* ---- ARB multitexture — OpenGX aliases to core GL 1.3 ---- */
+    /* ---- ARB multitexture ---- */
     qglActiveTextureARB       = (void(*)(GLenum))glActiveTexture;
     qglClientActiveTextureARB = (void(*)(GLenum))glClientActiveTexture;
     qglMultiTexCoord2fARB     = (void(*)(GLenum,GLfloat,GLfloat))glMultiTexCoord2f;
 
-    /* Compiled vertex arrays — OpenGX may not expose these; leave NULL so
-     * the extension check in tr_init.c falls through cleanly.             */
+    /* CVA — OpenGX doesn't expose these; NULL lets tr_init.c skip the extension. */
     qglLockArraysEXT   = NULL;
     qglUnlockArraysEXT = NULL;
 
@@ -153,5 +98,4 @@ void QGL_Init(void)
 
 void QGL_Shutdown(void)
 {
-    /* Nothing to unload on Wii — OpenGX is statically linked */
 }

@@ -98,8 +98,8 @@ SV_INIT="$IOQ3/code/server/sv_init.c"
 if grep -q "after BotInitCvars" "$SV_INIT"; then
     echo "sv_init.c checkpoints already patched — skipping."
 else
-    sed -i 's/SV_BotInitCvars();/{ FILE *_f=fopen("sd:\/quake3\/svinit.txt","a"); if(_f){fprintf(_f,"before BotInitCvars\\n");fclose(_f);} } SV_BotInitCvars(); { FILE *_f=fopen("sd:\/quake3\/svinit.txt","a"); if(_f){fprintf(_f,"after BotInitCvars\\n");fclose(_f);} }/' "$SV_INIT"
-    sed -i 's/SV_BotInitBotLib();/{ FILE *_f=fopen("sd:\/quake3\/svinit.txt","a"); if(_f){fprintf(_f,"before BotInitBotLib\\n");fclose(_f);} } SV_BotInitBotLib(); { FILE *_f=fopen("sd:\/quake3\/svinit.txt","a"); if(_f){fprintf(_f,"after BotInitBotLib\\n");fclose(_f);} }/' "$SV_INIT"
+    sed -i 's/SV_BotInitCvars();/#ifdef WII_DEBUG\n\t{ FILE *_f=fopen("sd:\/quake3\/svinit.txt","a"); if(_f){fprintf(_f,"before BotInitCvars\\n");fclose(_f);} }\n#endif\n\tSV_BotInitCvars();\n#ifdef WII_DEBUG\n\t{ FILE *_f=fopen("sd:\/quake3\/svinit.txt","a"); if(_f){fprintf(_f,"after BotInitCvars\\n");fclose(_f);} }\n#endif/' "$SV_INIT"
+    sed -i 's/SV_BotInitBotLib();/#ifdef WII_DEBUG\n\t{ FILE *_f=fopen("sd:\/quake3\/svinit.txt","a"); if(_f){fprintf(_f,"before BotInitBotLib\\n");fclose(_f);} }\n#endif\n\tSV_BotInitBotLib();\n#ifdef WII_DEBUG\n\t{ FILE *_f=fopen("sd:\/quake3\/svinit.txt","a"); if(_f){fprintf(_f,"after BotInitBotLib\\n");fclose(_f);} }\n#endif/' "$SV_INIT"
     echo "sv_init.c checkpoints patched."
 fi
 
@@ -154,10 +154,12 @@ OLD = 'SV_LocateGameData( VMA(1), args[2], args[3], VMA(4), args[5] );'
 NEW = (
     'SV_LocateGameData( VMA(1), args[2], args[3], VMA(4), args[5] );\n'
     '#define WII_LOCGAME_DEBUG 1\n'
+    '#ifdef WII_DEBUG\n'
     '\t\t\t{ FILE *_gf=fopen("sd:/quake3/gamedata.txt","w");\n'
     '\t\t\t  if(_gf){ fprintf(_gf,"gentities=%p num=%d size=%d\\n",\n'
     '\t\t\t    (void*)sv.gentities, sv.num_entities, sv.gentitySize);\n'
-    '\t\t\t    fclose(_gf); } }'
+    '\t\t\t    fclose(_gf); } }\n'
+    '#endif'
 )
 if OLD in src:
     src = src.replace(OLD, NEW, 1)
@@ -184,10 +186,12 @@ with open(path, 'r') as f:
 
 OLD = 'SV_CreateBaseline();'
 NEW = (
-    '{ FILE *_bf=fopen("sd:/quake3/gamedata.txt","a");\n'
+    '#ifdef WII_DEBUG\n'
+    '\t{ FILE *_bf=fopen("sd:/quake3/gamedata.txt","a");\n'
     '\t  if(_bf){ fprintf(_bf,"pre-baseline: gentities=%p num=%d size=%d clients=%p\\n",\n'
     '\t    (void*)sv.gentities, sv.num_entities, sv.gentitySize, (void*)sv.gameClients);\n'
     '\t    fclose(_bf); } }\n'
+    '#endif\n'
     '#define WII_BASELINE_DEBUG 1\n'
     '\tSV_CreateBaseline();'
 )

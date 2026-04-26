@@ -1,12 +1,5 @@
-/* GL/gl.h — Wii wrapper.
- *
- * When OPENGX_AVAILABLE, forward to OpenGX's real Mesa 7.0 GL header via
- * #include_next so this file does not shadow it.  Without OpenGX the stub
- * types below satisfy the renderer's type dependencies. */
-
+/* GL/gl.h -- Wii wrapper. Forwards to OpenGX or provides type stubs. */
 #ifdef OPENGX_AVAILABLE
-/* #include_next continues the search from the next -I directory, skipping
- * this file.  That finds /c/devkitPro/portlibs/wii/include/GL/gl.h. */
 #  include_next <GL/gl.h>
 #else
 #ifndef WII_GL_STUB_H

@@ -1,8 +1,4 @@
-#---------------------------------------------------------------------------------
 # ioquake3-wii Makefile
-# Requires devkitPPC + libogc (install via devkitPro pacman)
-#   pacman -S wii-dev
-#---------------------------------------------------------------------------------
 ifeq ($(strip $(DEVKITPRO)),)
   $(error "Set DEVKITPRO in your environment. export DEVKITPRO=/opt/devkitpro")
 endif
@@ -12,23 +8,13 @@ endif
 
 include $(DEVKITPPC)/wii_rules
 
-#---------------------------------------------------------------------------------
-# Input backend: wiimote (default) or gamecube
-#   make                        → Wiimote + Nunchuk
-#   make INPUT_BACKEND=gamecube → GameCube controller
-#---------------------------------------------------------------------------------
+# Input backend
 INPUT_BACKEND ?= wiimote
 
-#---------------------------------------------------------------------------------
-# Game mode: baseq3 (default) or baseoa (OpenArena)
-#   make                     → Quake III Arena (reads sd:/quake3/baseq3/)
-#   make GAMEMODE=baseoa     → OpenArena       (reads sd:/quake3/baseoa/)
-#---------------------------------------------------------------------------------
+# Game mode
 GAMEMODE ?= baseq3
 
-#---------------------------------------------------------------------------------
 # Project identity
-#---------------------------------------------------------------------------------
 TARGET      := ioquake3_wii
 BUILD       := build
 SOURCES     := code \
@@ -37,25 +23,20 @@ SOURCES     := code \
                code/sys
 PORTDIR     := $(CURDIR)
 
-ifeq ($(INPUT_BACKEND),gamecube)
-  WII_INPUT_SRC := code/input/wii_input_gc.c
+WII_INPUT_SRC := code/input/wii_input.c
+ifeq ($(INPUT_BACKEND),wiimote)
+  WII_INPUT_FLAGS := -DWPAD_ENABLED=1
 else
-  WII_INPUT_SRC := code/input/wii_input.c
+  WII_INPUT_FLAGS := -DWPAD_ENABLED=0
 endif
 INCLUDES    := code
 
-#---------------------------------------------------------------------------------
-# OpenGX — OpenGL 1.x over GX (devkitPro portlib: pacman -S wii-opengx)
-# Header at $(DEVKITPRO)/portlibs/wii/include/GL/gl.h
-# Library  at $(DEVKITPRO)/portlibs/wii/lib/libopengx.a
-#---------------------------------------------------------------------------------
+# OpenGX
 OPENGX_INC  := $(DEVKITPRO)/portlibs/wii/include
 OPENGX_LIB  := $(DEVKITPRO)/portlibs/wii/lib
 OPENGX_SRC  := ../opengx/src
 
-#---------------------------------------------------------------------------------
 # ioQuake3 source directories
-#---------------------------------------------------------------------------------
 IOQ3_DIR    := ../ioq3
 
 IOQ3_SRCS   := \
@@ -165,16 +146,7 @@ IOQ3_SRCS   := \
   $(IOQ3_DIR)/code/renderercommon/tr_image_tga.c \
   $(IOQ3_DIR)/code/renderercommon/tr_noise.c
 
-#---------------------------------------------------------------------------------
-# zlib: auto-detect ioQ3 internal, else use devkitPro portlibs.
-#
-# Internal zlib may live at:
-#   code/libs/zlib/       (older ioq3)
-#   code/zlib/            (some forks)
-#
-# devkitPro portlibs fallback:
-#   pacman -S ppc-zlib
-#---------------------------------------------------------------------------------
+# zlib: auto-detect ioQ3 internal zlib, else fall back to devkitPro portlibs (ppc-zlib).
 IOQ3_ZLIB_A := $(IOQ3_DIR)/code/libs/zlib/zlib.h
 IOQ3_ZLIB_B := $(IOQ3_DIR)/code/zlib/zlib.h
 
@@ -191,8 +163,6 @@ else ifneq ($(wildcard $(IOQ3_ZLIB_B)),)
   IOQ3_ZLIB_SRCS := $(wildcard $(ZLIB_DIR)/*.c)
   ZLIB_LIBS     :=
 else
-  # No internal zlib found — use devkitPro portlibs (pacman -S ppc-zlib)
-  # Search common portlibs locations across devkitPro versions
   PORTLIBS_WII  := $(DEVKITPRO)/portlibs/wii
   PORTLIBS_PPC  := $(DEVKITPRO)/portlibs/ppc
   ifneq ($(wildcard $(PORTLIBS_WII)/include/zlib.h),)
@@ -206,18 +176,22 @@ else
   ZLIB_CFLAGS   := -I$(PORTLIBS)/include
   IOQ3_ZLIB_SRCS :=
   ZLIB_LIBS     := -L$(PORTLIBS)/lib -lz
-  $(info >>> Using devkitPro portlibs zlib: $(PORTLIBS))
 endif
 
-# Copy zlib.h (and zconf.h if present) next to unzip.h so that
-# GCC resolves the quoted #include "zlib.h" before checking -I paths.
+# libjpeg: always in portlibs (independent of zlib source)
+PORTLIBS_WII_DIR := $(DEVKITPRO)/portlibs/wii
+PORTLIBS_PPC_DIR := $(DEVKITPRO)/portlibs/ppc
+ifneq ($(wildcard $(PORTLIBS_WII_DIR)/lib/libjpeg.a),)
+  JPEG_LIBDIR := $(PORTLIBS_WII_DIR)/lib
+else
+  JPEG_LIBDIR := $(PORTLIBS_PPC_DIR)/lib
+endif
+
+# Copy zlib headers next to unzip.h so #include "zlib.h" resolves correctly.
 ZLIB_H_COPY  := $(IOQ3_DIR)/code/qcommon/zlib.h
 ZCONF_H_COPY := $(IOQ3_DIR)/code/qcommon/zconf.h
 
-#---------------------------------------------------------------------------------
 # Compiler flags
-#   make WII_DEBUG=1 → enables SD card logging (boot.txt, crash.txt, comlog.txt)
-#---------------------------------------------------------------------------------
 ifeq ($(WII_DEBUG),1)
   WII_DEBUG_FLAG := -DWII_DEBUG
 else
@@ -234,13 +208,12 @@ CFLAGS  = $(MACHDEP) \
           -pipe -O2 -Wall -Wno-unused-variable -Wno-missing-braces -Wno-cpp \
           $(WII_DEBUG_FLAG) \
           $(GAMEMODE_FLAGS) \
+          $(WII_INPUT_FLAGS) \
           -msdata=none -G 0 \
           -DGEKKO -DWII \
           -DMAX_CLIENTS=8 \
-          -DMAX_RAW_SAMPLES=4096 \
           -DBOTLIB -DUSE_CODEC_VORBIS=0 -DUSE_CODEC_OPUS=0 -DUSE_OPENAL=0 \
           -DUSE_LOCAL_HEADERS \
-          -DMIN_DEDICATED_COMHUNKMEGS=24 -DMIN_COMHUNKMEGS=24 \
           $(ZLIB_CFLAGS) \
           -include $(PORTDIR)/code/sys/wii_platform.h \
           -I$(PORTDIR)/code/sys/include \
@@ -257,21 +230,16 @@ CFLAGS  = $(MACHDEP) \
 
 CXXFLAGS = $(CFLAGS)
 
-LDFLAGS = $(MACHDEP) -Wl,-Map,$(BUILD)/ioquake3_wii.elf.map -Wl,--wrap,SV_Init -Wl,--wrap,CL_GenerateQKey -Wl,--wrap,VM_Call -Wl,--wrap,Com_Printf -Wl,--wrap,calloc -Wl,--wrap,__malloc_lock -Wl,--wrap,__malloc_unlock -G 0 -T rvl.ld
+LDFLAGS = $(MACHDEP) -Wl,-Map,$(BUILD)/ioquake3_wii.elf.map -Wl,--wrap,CL_GenerateQKey -Wl,--wrap,VM_Call -Wl,--wrap,calloc -Wl,--wrap,__malloc_lock -Wl,--wrap,__malloc_unlock -G 0 -T rvl.ld
 
 ifeq ($(INPUT_BACKEND),gamecube)
-  LIBS  = -L$(LIBOGC_LIB) -L$(OPENGX_LIB) -lopengx -Wl,--start-group -lasnd -logc -ldi -lfat -lm -Wl,--end-group $(ZLIB_LIBS) -L$(PORTLIBS)/lib -ljpeg
+  LIBS  = -L$(LIBOGC_LIB) -L$(OPENGX_LIB) -lopengx -Wl,--start-group -lasnd -logc -ldi -lfat -lm -Wl,--end-group $(ZLIB_LIBS) -L$(JPEG_LIBDIR) -ljpeg
 else
-  LIBS  = -L$(LIBOGC_LIB) -L$(OPENGX_LIB) -lopengx -lwiiuse -lbte -lwiikeyboard -Wl,--start-group -lasnd -logc -ldi -lfat -lm -Wl,--end-group $(ZLIB_LIBS) -L$(PORTLIBS)/lib -ljpeg
+  LIBS  = -L$(LIBOGC_LIB) -L$(OPENGX_LIB) -lopengx -lwiiuse -lbte -lwiikeyboard -Wl,--start-group -lasnd -logc -ldi -lfat -lm -Wl,--end-group $(ZLIB_LIBS) -L$(JPEG_LIBDIR) -ljpeg
 endif
 
-#---------------------------------------------------------------------------------
 # Source collection
-#---------------------------------------------------------------------------------
-# Patched OpenGX source — disabled for now to match the working backup exactly.
-# The format-change realloc fix is correct but we need to confirm the stock
-# library works first before re-enabling.
-#---------------------------------------------------------------------------------
+# Patched OpenGX source — disabled; using stock library.
 #OGX_PATCHED_SRCS := $(OPENGX_SRC)/texture.c
 #OGX_PATCHED_OBJS := $(patsubst $(OPENGX_SRC)/%.c,$(BUILD)/opengx/%.o,$(OGX_PATCHED_SRCS))
 OGX_PATCHED_OBJS :=
@@ -286,15 +254,12 @@ OBJS := $(patsubst %.c,$(BUILD)/%.o,$(filter %.c,$(ALL_SRCS))) \
         $(patsubst %.cpp,$(BUILD)/%.o,$(filter %.cpp,$(ALL_SRCS))) \
         $(OGX_PATCHED_OBJS)
 
-#---------------------------------------------------------------------------------
 # Build rules
-#---------------------------------------------------------------------------------
 .PHONY: all clean dol prebuild
 
 all: $(BUILD)/$(TARGET).elf
 
 # Copy zlib headers next to unzip.h before compiling.
-# ZLIB_DIR always points to the right include directory (internal or portlibs).
 prebuild:
 	@cp $(ZLIB_DIR)/zlib.h $(ZLIB_H_COPY)
 	@test -f $(ZLIB_DIR)/zconf.h && cp $(ZLIB_DIR)/zconf.h $(ZCONF_H_COPY) || true
@@ -315,8 +280,6 @@ $(BUILD)/code/%.o: code/%.c
 	$(CC) $(CFLAGS) -DWII_INCLUDE_NET -c $< -o $@
 
 # Patched OpenGX sources — built with OpenGX's own internal include path.
-# The -include wii_platform.h is removed (not compatible with OpenGX internals)
-# and replaced with the minimal flags OpenGX needs.
 $(BUILD)/opengx/%.o: $(OPENGX_SRC)/%.c
 	@mkdir -p $(dir $@)
 	@echo "CC (opengx) $<"
@@ -327,7 +290,6 @@ $(BUILD)/$(IOQ3_DIR)/code/client/cl_ui.o: $(IOQ3_DIR)/code/client/cl_ui.c
 	@echo "CC $< [wii-patched]"
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# cl_main.c specific build rule
 $(BUILD)/$(IOQ3_DIR)/code/client/cl_main.o: $(IOQ3_DIR)/code/client/cl_main.c
 	@mkdir -p $(dir $@)
 	@echo "CC $< [wii-patched]"
@@ -335,10 +297,7 @@ $(BUILD)/$(IOQ3_DIR)/code/client/cl_main.o: $(IOQ3_DIR)/code/client/cl_main.c
 $(BUILD)/$(IOQ3_DIR)/code/qcommon/common.o: $(IOQ3_DIR)/code/qcommon/common.c
 	@mkdir -p $(dir $@)
 	@echo "CC $< [wii-patched]"
-	$(CC) $(CFLAGS) \
-	      -UMIN_COMHUNKMEGS -DMIN_COMHUNKMEGS=8 \
-	      -UMIN_DEDICATED_COMHUNKMEGS -DMIN_DEDICATED_COMHUNKMEGS=8 \
-	      -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # net_ip.c and wii_main.c both inline wii_net.h; rebuild both when the shim changes.
 WII_NET_H := code/sys/wii_net.h
@@ -348,14 +307,12 @@ $(BUILD)/../ioq3/code/qcommon/net_ip.o: ../ioq3/code/qcommon/net_ip.c $(WII_NET_
 	@echo "CC $<"
 	$(CC) $(CFLAGS) -DWII_INCLUDE_NET -c $< -o $@
 
-# huffman.c has its own internal send() — no special flags needed now that
-# network.h is excluded from the force-included platform header
-
 $(BUILD)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	@echo "CXX $<"
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+# Convert ELF to DOL for Homebrew Channel
 dol: $(BUILD)/$(TARGET).elf
 	@echo "Converting to .dol"
 	elf2dol $(BUILD)/$(TARGET).elf $(BUILD)/$(TARGET).dol
@@ -363,6 +320,7 @@ dol: $(BUILD)/$(TARGET).elf
 
 clean:
 	@rm -rf $(BUILD)
-	@find ../ioq3/code -name "*.o" -delete 2>/dev/null || true
 	@rm -f $(ZLIB_H_COPY) $(ZCONF_H_COPY)
+	@$(foreach d,qcommon client server botlib renderergl1 renderercommon, \
+		rm -f ../ioq3/code/$(d)/*.o 2>/dev/null || true;)
 	@echo "Cleaned."

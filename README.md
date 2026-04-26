@@ -1,4 +1,4 @@
-# ioquake3-wii
+# ioquake3-wii v0.3.0
 
 A port of [ioQuake3](https://github.com/ioquake/ioq3) to the Nintendo Wii,
 using devkitPPC + libogc and [OpenGX](https://github.com/devkitPro/opengx)
@@ -10,12 +10,11 @@ using devkitPPC + libogc and [OpenGX](https://github.com/devkitPro/opengx)
 - All textures render correctly (map, icons, models, particles)
 - Networking works (Wi-Fi, LAN discovery, internet server browser)
 - GameCube controller with dual-stick analog input
-- Cinematic (intro video) playback with audio
+- Wiimote + Nunchuk with IR pointer aiming
 
 **Known issues:**
 
-- Wiimote + Nunchuk input is **not working** at this time
-- Single player/Wii hosting is **not working** at this time. Only Online/LAN multiplayer servers work.
+- Single player / Wii hosting is untested. Online and LAN multiplayer servers work.
 
 ## Prerequisites (Windows)
 
@@ -73,17 +72,17 @@ collide with the Wii port's own definitions. It only needs to be run once.
 ### Step 2 -- Build
 
 ```bash
-# Quake III Arena, GameCube controller (recommended)
+# Quake III Arena, Wiimote + Nunchuk (default)
+make dol
+
+# Quake III Arena, GameCube controller
 make INPUT_BACKEND=gamecube dol
 
-# Quake III Arena, Wiimote + Nunchuk (not working ATM)
-make dol
+# OpenArena, Wiimote + Nunchuk
+make GAMEMODE=baseoa dol
 
 # OpenArena, GameCube controller
 make INPUT_BACKEND=gamecube GAMEMODE=baseoa dol
-
-# OpenArena, Wiimote + Nunchuk (not working ATM)
-make GAMEMODE=baseoa dol
 
 # Debug build (enables SD card diagnostic logging)
 make INPUT_BACKEND=gamecube WII_DEBUG=1 dol
@@ -189,10 +188,40 @@ from the Q3 menu.
 > from there, or use the Wii's Power/Reset buttons to return to the
 > Homebrew Channel.
 
-### Wiimote + Nunchuk (default, not working ATM)
+### Wiimote + Nunchuk (default)
 
-The Wiimote + Nunchuk input path is currently non-functional. Use the
-GameCube controller backend (`INPUT_BACKEND=gamecube`) instead.
+IR pointer aiming with nunchuk stick movement. If the Wiimote disconnects,
+input falls back to the GameCube controller automatically.
+
+#### In-game
+
+| Input | Action |
+|---|---|
+| Nunchuk stick | Move (forward/back + strafe) |
+| IR pointer | Aim (yaw + pitch) |
+| **B** (trigger) | Fire |
+| **A** | Jump |
+| Nunchuk **Z** | Zoom |
+| Nunchuk **C** | Crouch |
+| **+** | Menu (Escape) |
+| **-** | Scoreboard |
+| D-pad up/down | Next/prev weapon |
+| D-pad left/right | Prev/next weapon (alt) |
+| **1** | Walk |
+| **HOME** | Exit to Homebrew Channel |
+
+#### Menus
+
+| Input | Action |
+|---|---|
+| IR pointer | Move cursor |
+| Nunchuk stick | Move cursor (fallback) |
+| **A** | Confirm (Enter) |
+| **B** | Back (Escape) |
+| **+** | Escape |
+| **1** | Click |
+| Nunchuk **Z** | Click |
+| D-pad | Arrow keys |
 
 ---
 
@@ -213,11 +242,11 @@ Use the in-game server browser (internet + LAN).
 | GX FIFO | 256 KB | MEM1 | Command buffer |
 | Framebuffers | ~2.4 MB | MEM1 | Two XFB at 640x480 |
 | Stack | 512 KB | MEM1 | Overridden from 16 KB default |
-## Known missing pieces (v0.1)
+## Known missing pieces
 
-- [ ] IR (Wiimote pointer) mouselook
 - [ ] On-screen keyboard for console input
 - [ ] Classic Controller support
+- [ ] Single player / local server hosting
 
 ---
 
