@@ -11,6 +11,7 @@ using devkitPPC + libogc and [OpenGX](https://github.com/devkitPro/opengx)
 - Networking works (Wi-Fi, LAN discovery, internet server browser)
 - GameCube controller with dual-stick analog input
 - Wiimote + Nunchuk with IR pointer aiming
+- USB keyboard and mouse support
 - Bot support (AI opponents, works offline and on hosted servers)
 - Local server hosting
 
@@ -70,11 +71,8 @@ collide with the Wii port's own definitions. It only needs to be run once.
 ### Step 2 -- Build
 
 ```bash
-# Wiimote + Nunchuk (default)
+# Release build
 make dol
-
-# GameCube controller
-make INPUT_BACKEND=gamecube dol
 
 # Debug build (enables SD card diagnostic logging)
 make WII_DEBUG=1 dol
@@ -84,13 +82,9 @@ make WII_DEBUG=1 dol
 
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
-| `INPUT_BACKEND` | `wiimote`, `gamecube` | `wiimote` | Controller input backend |
 | `WII_DEBUG` | `0`, `1` | `0` | Enable diagnostic logging to SD card |
 
 **Output:** `build/ioquake3_wii.dol`
-
-> **Note:** When switching `INPUT_BACKEND`, run `make clean` first to ensure
-> all objects are rebuilt with the correct flags.
 
 ---
 
@@ -117,7 +111,11 @@ SD:/
 
 ## Controls
 
-### GameCube controller (`INPUT_BACKEND=gamecube`)
+All input methods are active simultaneously. Use whichever controller you
+prefer, or combine them (e.g. GC controller for movement + USB mouse for
+aiming). USB devices must be connected at boot (no hot-plug).
+
+### GameCube controller
 
 Dual-stick FPS layout with analog movement and look. Buttons are rebindable
 from the Q3 menu.
@@ -157,7 +155,7 @@ from the Q3 menu.
 > from there, or use the Wii's Power/Reset buttons to return to the
 > Homebrew Channel.
 
-### Wiimote + Nunchuk (default)
+### Wiimote + Nunchuk
 
 IR pointer aiming with nunchuk stick movement. If the Wiimote disconnects,
 input falls back to the GameCube controller automatically.
@@ -192,6 +190,19 @@ input falls back to the GameCube controller automatically.
 | Nunchuk **Z** | Click |
 | D-pad | Arrow keys |
 
+### USB keyboard
+
+Plug a standard USB keyboard into the Wii to type console commands, server
+IPs, and chat messages. Press `~` (tilde) to toggle the Q3 console.
+
+All standard keys are supported: letters, numbers, symbols, F1-F12, arrow
+keys, numpad, and modifiers (Shift, Ctrl, Alt).
+
+### USB mouse
+
+Plug a USB mouse into the Wii for desktop-style aiming. Left/right/middle
+buttons and scroll wheel are supported.
+
 ---
 
 ## Bots
@@ -222,7 +233,6 @@ Use the in-game server browser (internet + LAN).
 | Stack | 512 KB | MEM1 | Overridden from 16 KB default |
 ## Known missing pieces
 
-- [ ] On-screen keyboard for console input
 - [ ] Classic Controller support
 
 ---

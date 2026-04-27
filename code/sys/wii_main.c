@@ -212,6 +212,7 @@ int main(int argc, char *argv[])
     Com_Init(cmdline);
     WII_DBG_PRINTF("[wii] Com_Init done\n");
     boot_mark("Com_Init done");
+
     NET_Init();
 
     while (1) {

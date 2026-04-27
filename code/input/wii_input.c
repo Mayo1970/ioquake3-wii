@@ -1,4 +1,5 @@
-/* wii_input.c -- Unified controller input (GC pad + optional Wiimote+Nunchuk). */
+/* wii_input.c -- Unified controller input (GC pad + optional Wiimote+Nunchuk)
+   plus USB keyboard and mouse support. */
 
 #ifndef WPAD_ENABLED
 #define WPAD_ENABLED  0
@@ -6,6 +7,8 @@
 
 #include <gccore.h>
 #include <ogc/pad.h>
+#include <ogc/usbmouse.h>
+#include <wiikeyboard/keyboard.h>
 #if WPAD_ENABLED
 #include <wiiuse/wpad.h>
 #endif
@@ -512,6 +515,187 @@ static void WM_Input_Frame(void)
 
 #endif /* WPAD_ENABLED */
 
+/* ---------- USB keyboard ---------- */
+
+static qboolean s_kb_inited  = qfalse;
+static qboolean s_mouse_inited = qfalse;
+
+/* Translate libogc keyboard symbol (KS_*) to Q3 keycode.
+   Returns 0 for unmapped keys. */
+static int KB_SymToQ3Key(u16 sym)
+{
+    /* ASCII printable range — Q3 wants lowercase */
+    if (sym >= KS_space && sym <= KS_asciitilde) {
+        int ch = (int)sym;
+        if (ch >= 'A' && ch <= 'Z')
+            ch = ch - 'A' + 'a';
+        return ch;
+    }
+
+    switch (sym) {
+    case KS_BackSpace:  return K_BACKSPACE;
+    case KS_Tab:        return K_TAB;
+    case KS_Return:     return K_ENTER;
+    case KS_Escape:     return K_ESCAPE;
+    case KS_Delete:     return K_DEL;
+
+    /* Arrow / navigation */
+    case KS_Up:         return K_UPARROW;
+    case KS_Down:       return K_DOWNARROW;
+    case KS_Left:       return K_LEFTARROW;
+    case KS_Right:      return K_RIGHTARROW;
+    case KS_Home:       return K_HOME;
+    case KS_End:        return K_END;
+    case KS_Prior:      return K_PGUP;
+    case KS_Next:       return K_PGDN;
+    case KS_Insert:     return K_INS;
+    case KS_Pause:      return K_PAUSE;
+
+    /* Modifiers */
+    case KS_Shift_L:
+    case KS_Shift_R:    return K_SHIFT;
+    case KS_Control_L:
+    case KS_Control_R:  return K_CTRL;
+    case KS_Alt_L:
+    case KS_Alt_R:      return K_ALT;
+    case KS_Caps_Lock:  return K_CAPSLOCK;
+
+    /* Function keys */
+    case KS_f1:  case KS_F1:  return K_F1;
+    case KS_f2:  case KS_F2:  return K_F2;
+    case KS_f3:  case KS_F3:  return K_F3;
+    case KS_f4:  case KS_F4:  return K_F4;
+    case KS_f5:  case KS_F5:  return K_F5;
+    case KS_f6:  case KS_F6:  return K_F6;
+    case KS_f7:  case KS_F7:  return K_F7;
+    case KS_f8:  case KS_F8:  return K_F8;
+    case KS_f9:  case KS_F9:  return K_F9;
+    case KS_f10: case KS_F10: return K_F10;
+    case KS_f11: case KS_F11: return K_F11;
+    case KS_f12: case KS_F12: return K_F12;
+
+    /* Keypad */
+    case KS_KP_Enter:    return K_KP_ENTER;
+    case KS_KP_Add:      return K_KP_PLUS;
+    case KS_KP_Subtract: return K_KP_MINUS;
+    case KS_KP_Multiply: return K_KP_STAR;
+    case KS_KP_Divide:   return K_KP_SLASH;
+    case KS_KP_Equal:    return K_KP_EQUALS;
+    case KS_KP_Delete:   return K_KP_DEL;
+    case KS_KP_Insert:   return K_KP_INS;
+    case KS_KP_Home:     return K_KP_HOME;
+    case KS_KP_End:      return K_KP_END;
+    case KS_KP_Up:       return K_KP_UPARROW;
+    case KS_KP_Down:     return K_KP_DOWNARROW;
+    case KS_KP_Left:     return K_KP_LEFTARROW;
+    case KS_KP_Right:    return K_KP_RIGHTARROW;
+    case KS_KP_Prior:    return K_KP_PGUP;
+    case KS_KP_Next:     return K_KP_PGDN;
+    case KS_KP_Begin:    return K_KP_5;
+    case KS_Num_Lock:    return K_KP_NUMLOCK;
+    case KS_KP_0:        return K_KP_INS;
+    case KS_KP_1:        return K_KP_END;
+    case KS_KP_2:        return K_KP_DOWNARROW;
+    case KS_KP_3:        return K_KP_PGDN;
+    case KS_KP_4:        return K_KP_LEFTARROW;
+    case KS_KP_5:        return K_KP_5;
+    case KS_KP_6:        return K_KP_RIGHTARROW;
+    case KS_KP_7:        return K_KP_HOME;
+    case KS_KP_8:        return K_KP_UPARROW;
+    case KS_KP_9:        return K_KP_PGUP;
+    case KS_KP_Decimal:  return K_KP_DEL;
+
+    default: return 0;
+    }
+}
+
+/* Drain pending USB keyboard events and inject into Q3 */
+static void USB_Keyboard_Frame(void)
+{
+    keyboard_event evt;
+    int max_events = 32; /* safety cap per frame */
+
+    while (max_events-- > 0 && KEYBOARD_GetEvent(&evt) > 0) {
+        if (evt.type == KEYBOARD_PRESSED || evt.type == KEYBOARD_RELEASED) {
+            qboolean down = (evt.type == KEYBOARD_PRESSED) ? qtrue : qfalse;
+
+            /* Console toggle: ~ or ` */
+            if (down && (evt.symbol == KS_grave || evt.symbol == KS_asciitilde)) {
+                Com_QueueEvent(0, SE_KEY, K_CONSOLE, qtrue, 0, NULL);
+                Com_QueueEvent(0, SE_KEY, K_CONSOLE, qfalse, 0, NULL);
+                continue;
+            }
+
+            int q3key = KB_SymToQ3Key(evt.symbol);
+            if (q3key == 0)
+                continue;
+
+            Com_QueueEvent(0, SE_KEY, q3key, down, 0, NULL);
+
+            /* On key press, also send SE_CHAR for text input */
+            if (down) {
+                if (q3key == K_BACKSPACE) {
+                    Com_QueueEvent(0, SE_CHAR, 8, 0, 0, NULL); /* Ctrl-H */
+                } else if (evt.symbol >= KS_space && evt.symbol <= KS_asciitilde) {
+                    /* Send the original symbol (preserving case/shift) */
+                    Com_QueueEvent(0, SE_CHAR, (int)evt.symbol, 0, 0, NULL);
+                } else if (q3key == K_ENTER || q3key == K_KP_ENTER) {
+                    Com_QueueEvent(0, SE_CHAR, '\r', 0, 0, NULL);
+                } else if (q3key == K_TAB) {
+                    Com_QueueEvent(0, SE_CHAR, '\t', 0, 0, NULL);
+                }
+            }
+        }
+    }
+}
+
+/* ---------- USB mouse ---------- */
+
+static u8 s_mouse_old_buttons = 0;
+
+/* Drain pending USB mouse events and inject into Q3 */
+static void USB_Mouse_Frame(void)
+{
+    mouse_event evt;
+    int dx = 0, dy = 0;
+    u8 cur_buttons = s_mouse_old_buttons;
+    int max_events = 64;
+
+    /* Accumulate all pending mouse events this frame */
+    while (max_events-- > 0 && MOUSE_GetEvent(&evt) > 0) {
+        dx += evt.rx;
+        dy += evt.ry;
+        cur_buttons = evt.button;
+
+        /* Scroll wheel */
+        if (evt.rz > 0)
+            for (int i = 0; i < evt.rz; i++) {
+                Com_QueueEvent(0, SE_KEY, K_MWHEELUP, qtrue, 0, NULL);
+                Com_QueueEvent(0, SE_KEY, K_MWHEELUP, qfalse, 0, NULL);
+            }
+        else if (evt.rz < 0)
+            for (int i = 0; i < -evt.rz; i++) {
+                Com_QueueEvent(0, SE_KEY, K_MWHEELDOWN, qtrue, 0, NULL);
+                Com_QueueEvent(0, SE_KEY, K_MWHEELDOWN, qfalse, 0, NULL);
+            }
+    }
+
+    /* Movement */
+    if (dx != 0 || dy != 0)
+        Com_QueueEvent(0, SE_MOUSE, dx, dy, 0, NULL);
+
+    /* Buttons: bit 0 = left, bit 1 = right, bit 2 = middle */
+    static const int mouse_keys[] = { K_MOUSE1, K_MOUSE2, K_MOUSE3 };
+    int i;
+    for (i = 0; i < 3; i++) {
+        qboolean was = (s_mouse_old_buttons & (1 << i)) ? qtrue : qfalse;
+        qboolean now = (cur_buttons & (1 << i)) ? qtrue : qfalse;
+        if (was != now)
+            Com_QueueEvent(0, SE_KEY, mouse_keys[i], now, 0, NULL);
+    }
+    s_mouse_old_buttons = cur_buttons;
+}
+
 /* ---------- Public API ---------- */
 
 void Wii_Input_Init(void)
@@ -546,6 +730,23 @@ void Wii_Input_Init(void)
     printf("[input] GameCube PAD initialised (dual-stick)\n");
 #endif
 #endif
+
+    /* USB keyboard */
+    if (KEYBOARD_Init(NULL) >= 0) {
+        s_kb_inited = qtrue;
+#ifdef WII_DEBUG
+        printf("[input] USB keyboard initialised\n");
+#endif
+    }
+
+    /* USB mouse */
+    if (MOUSE_Init() >= 0) {
+        s_mouse_inited = qtrue;
+        s_mouse_old_buttons = 0;
+#ifdef WII_DEBUG
+        printf("[input] USB mouse initialised\n");
+#endif
+    }
 }
 
 void Wii_Input_Frame(void)
@@ -556,6 +757,12 @@ void Wii_Input_Frame(void)
     s_home_pressed = qfalse;
     GC_Input_Frame();
 #endif
+
+    /* USB devices layer on top of controller input */
+    if (s_kb_inited)
+        USB_Keyboard_Frame();
+    if (s_mouse_inited)
+        USB_Mouse_Frame();
 }
 
 qboolean Wii_Input_HomePressed(void)
